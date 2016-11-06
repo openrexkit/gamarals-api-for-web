@@ -32,12 +32,14 @@ main(int argc, char *argv[])
 	u_map_put(instance.default_headers, "Access-Control-Allow-Origin", "*");
 	instance.max_post_body_size = 1024 * 1024; /* 1 MB post limit */
 
-	ulfius_add_endpoint_by_val(&instance, "DELETE", PREFIX, "/project/:id/file", NULL, NULL, NULL, &project_delete_file, NULL);
+	ulfius_add_endpoint_by_val(&instance, "DELETE", PREFIX, "/project/:id", NULL, NULL, NULL, &project_delete_existing, NULL);
+	ulfius_add_endpoint_by_val(&instance, "DELETE", PREFIX, "/project/:id/:file", NULL, NULL, NULL, &project_delete_file, NULL);
 	ulfius_add_endpoint_by_val(&instance, "GET", PREFIX, "/project", NULL, NULL, NULL, &project_get_list, NULL);
 	ulfius_add_endpoint_by_val(&instance, "GET", PREFIX, "/project/:id", NULL, NULL, NULL, &project_get_files, NULL);
-	ulfius_add_endpoint_by_val(&instance, "GET", PREFIX, "/project/:id/file", NULL, NULL, NULL, &project_get_file, NULL);
-	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/project/:id/file", NULL, NULL, NULL, &project_put_file, NULL);
-	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/project/new", NULL, NULL, NULL, &project_put_new, NULL);
+	ulfius_add_endpoint_by_val(&instance, "GET", PREFIX, "/project/:id/:file", NULL, NULL, NULL, &project_get_file, NULL);
+	ulfius_add_endpoint_by_val(&instance, "POST", PREFIX, "/project/:id/:file", NULL, NULL, NULL, &project_post_file, NULL);
+	ulfius_add_endpoint_by_val(&instance, "POST", PREFIX, "/project/new", NULL, NULL, NULL, &project_post_new, NULL);
+	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/project/:id/:file", NULL, NULL, NULL, &project_put_file, NULL);
 
 	ulfius_add_endpoint_by_val(&instance, "GET", PREFIX, "/compile/:id", NULL, NULL, NULL, &compile_get_log, NULL);
 	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/compile/:id", NULL, NULL, NULL, &compile_put_project, NULL);
