@@ -41,7 +41,6 @@ main(int argc, char *argv[])
 	ulfius_add_endpoint_by_val(&instance, "POST", PREFIX, "/project/new", NULL, NULL, NULL, &project_post_new, NULL);
 	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/project/:id/:file", NULL, NULL, NULL, &project_put_file, NULL);
 
-	ulfius_add_endpoint_by_val(&instance, "GET", PREFIX, "/compile/:id", NULL, NULL, NULL, &compile_get_log, NULL);
 	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/compile/:id", NULL, NULL, NULL, &compile_put_project, NULL);
 
 	ulfius_add_endpoint_by_val(&instance, "PUT", PREFIX, "/mcu/:id", NULL, NULL, NULL, &mcu_put_flash, NULL);
@@ -61,6 +60,7 @@ main(int argc, char *argv[])
 	signal(SIGHUP, sig_nop);
 	signal(SIGINT, sig_nop);
 	signal(SIGQUIT, sig_nop);
+	signal(SIGCHLD, SIG_IGN);
 
 	/* wait until we get told to exit */
 	pause();
