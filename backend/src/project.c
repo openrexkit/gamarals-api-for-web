@@ -6,7 +6,6 @@
 #include <fcntl.h>
 #include <jansson.h>
 #include <ulfius.h>
-#include <unistd.h>
 
 #include "common.h"
 #include "config.h"
@@ -17,49 +16,55 @@ int
 project_delete_existing(const struct _u_request *request, struct _u_response *response, void *user_data)
 {
 	char path[PATH_MAX] = {0};
-	struct dirent *dir;
+	struct dirent *dentry;
 	const char *id;
-	DIR *d;
+	DIR *dh;
 	int rc;
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_url, "id"))) {
+	id = u_map_get(request->map_url, "id");
+	if(!id) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
-		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
+		rc = HTTP_BAD_REQUEST;
+		goto finish_response;
 	}
 
 	rc = snprintf(path, sizeof(path), "%s/%s", PROJECT_PATH, id);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project path.");
-		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
+		y_log_message(Y_LOG_LEVEL_ERROR, "snprintf failed: %s/%s", PROJECT_PATH, id);
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+		goto finish_response;
 	}
 
 	if (_project_path_check(path, FALSE) != 0) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Tried to delete project that doesn't exist: %s", id);
-		return ulfius_set_empty_response(response, HTTP_NOT_FOUND);
+		rc = HTTP_NOT_FOUND;
+		goto finish_response;
 	}
 
-	if (!(d = opendir(path))) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to iterate through directory: %s", path);
-		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
+	dh = opendir(path);
+	if (!dh) {
+		y_log_message(Y_LOG_LEVEL_ERROR, "opendir failed: %s", path);
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+		goto finish_response;
 	}
 
 	/* currently not supporting multiple directory levels */
 
-	while ((dir = readdir(d))) {
-		switch (dir->d_type) {
+	while ((dentry = readdir(dh))) {
+		switch (dentry->d_type) {
 		case DT_REG:
 		case DT_LNK:
-			if (unlinkat(dirfd(d), dir->d_name, 0) == -1) {
+			if (unlinkat(dirfd(dh), dentry->d_name, 0) == -1) {
 				y_log_message(Y_LOG_LEVEL_DEBUG,
 				    "Failed to delete file in project '%s': %s",
-				    id, dir->d_name);
+				    id, dentry->d_name);
 			}
 			break;
 		case DT_DIR:
-			if (strcmp(dir->d_name, ".") == 0 ||
-			    strcmp(dir->d_name, "..") == 0) {
+			if (strcmp(dentry->d_name, ".") == 0 ||
+			    strcmp(dentry->d_name, "..") == 0) {
 				break;
 			}
 
@@ -67,22 +72,25 @@ project_delete_existing(const struct _u_request *request, struct _u_response *re
 		default:
 			y_log_message(Y_LOG_LEVEL_DEBUG,
 			    "Unsupported file uncounted in project '%s': %s",
-			    id, dir->d_name);
+			    id, dentry->d_name);
 			break;
 		}
 	}
 
-	closedir(d);
+	closedir(dh);
 
 	if (rmdir(path) == -1) {
-		y_log_message(Y_LOG_LEVEL_ERROR,
-		    "Failed to remove project directory: %s", path);
-		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
+		y_log_message(Y_LOG_LEVEL_ERROR, "rmdir failed: %s", path);
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+		goto finish_response;
 	}
 
-	y_log_message(Y_LOG_LEVEL_DEBUG, "Successfully removed project: %s", id);
+	y_log_message(Y_LOG_LEVEL_DEBUG, "Successfully deleted project: %s", path);
 
-	return ulfius_set_empty_response(response, HTTP_NO_CONTENT);
+	rc = HTTP_NO_CONTENT;
+
+finish_response:
+	return ulfius_set_empty_response(response, rc);
 }
 
 int
@@ -95,28 +103,40 @@ project_delete_file(const struct _u_request *request, struct _u_response *respon
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_url, "id"))) {
+	id = u_map_get(request->map_url, "id");
+	if (!id) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
-		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
+		rc = HTTP_BAD_REQUEST;
+		goto finish_response;
 	}
 
-	if (!(file = u_map_get(request->map_url, "file"))) {
+	file = u_map_get(request->map_url, "file");
+	if (!file) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No file was specified.");
-		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
+		rc = HTTP_BAD_REQUEST;
+		goto finish_response;
 	}
 
 	rc = snprintf(path, sizeof(path), "%s/%s/%s", PROJECT_PATH, id, file);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project file path.");
-		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
+		y_log_message(Y_LOG_LEVEL_ERROR, "snprintf failed: %s/%s/%s",
+		    PROJECT_PATH, id, file);
+		rc = HTTP_INTERNAL_SERVER_ERROR;
+		goto finish_response;
 	}
 
-	if (unlink(path) != 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to delete project file: %s", path);
-		return ulfius_set_empty_response(response, HTTP_NOT_FOUND);
+	if (unlink(path) == -1) {
+		y_log_message(Y_LOG_LEVEL_ERROR, "unlink failed: %s", path);
+		rc = HTTP_NOT_FOUND;
+		goto finish_response;
 	}
 
-	return ulfius_set_empty_response(response, HTTP_NO_CONTENT);
+	y_log_message(Y_LOG_LEVEL_DEBUG, "Successfully deleted project file: %s", path);
+
+	rc = HTTP_NO_CONTENT;
+
+finish_response:
+	return ulfius_set_empty_response(response, rc);
 }
 
 int
@@ -132,31 +152,44 @@ project_get_file(const struct _u_request *request, struct _u_response *response,
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_url, "id"))) {
+	id = u_map_get(request->map_url, "id");
+	if (!id) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
 
-	if (!(file = u_map_get(request->map_url, "file"))) {
+	file = u_map_get(request->map_url, "file");
+	if (!file) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No file was specified.");
+		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
+	}
+
+	if (file[0] == '.') {
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Invalid file name specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
 
 	rc = snprintf(path, sizeof(path), "%s/%s/%s", PROJECT_PATH, id, file);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project file path.");
+		y_log_message(Y_LOG_LEVEL_ERROR, "snprintf failed: %s/%s/%s",
+		    PROJECT_PATH, id, file);
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
 	if (stat(path, &fstat) == -1) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to get stats on project file: %s", path);
+		y_log_message(Y_LOG_LEVEL_ERROR, "stat failed: %s", path);
 		return ulfius_set_empty_response(response, HTTP_NOT_FOUND);
 	}
 
 	buffer = malloc(fstat.st_size);
+	if (!buffer) {
+		y_log_message(Y_LOG_LEVEL_ERROR, "malloc failed: %s", path);
+		return U_ERROR_MEMORY;
+	}
 
-	if ((fd = open(path, O_RDONLY)) == -1) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to open project file: %s", path);
+	fd = open(path, O_RDONLY);
+	if (fd == -1) {
+		y_log_message(Y_LOG_LEVEL_ERROR, "open failed: %s", path);
 		rc = ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 		goto free_buffer;
 	}
@@ -183,15 +216,15 @@ project_get_files(const struct _u_request *request, struct _u_response *response
 {
 	char path[PATH_MAX] = {0};
 	json_t *root;
-	struct dirent *dir;
+	struct dirent *dentry;
 	const char *id;
-	DIR *d;
+	DIR *dh;
 	int rc;
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_url, "id")) ||
-	    strlen(id) <= 0) {
+	id = u_map_get(request->map_url, "id");
+	if (!id || strlen(id) <= 0) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
@@ -207,20 +240,22 @@ project_get_files(const struct _u_request *request, struct _u_response *response
 		return ulfius_set_empty_response(response, HTTP_NOT_FOUND);
 	}
 
-	if (!(root = json_array()))
+	root = json_array();
+	if (!root)
 		return U_ERROR_MEMORY;
 
-	if (!(d = opendir(path))) {
+	if (!(dh = opendir(path))) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to iterate through directory: %s", path);
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
-	while ((dir = readdir(d))) {
-		if (dir->d_type == DT_REG)
-			json_array_append_new(root, json_string(dir->d_name));
+	while ((dentry = readdir(dh))) {
+		if (dentry->d_type == DT_REG &&
+		    dentry->d_name[0] != '.')
+			json_array_append_new(root, json_string(dentry->d_name));
 	}
 
-	closedir(d);
+	closedir(dh);
 
 	y_log_message(Y_LOG_LEVEL_DEBUG, "Files for project '%s' requested.", id);
 
@@ -231,8 +266,8 @@ int
 project_get_list(const struct _u_request *request, struct _u_response *response, void *user_data)
 {
 	json_t *root;
-	struct dirent *dir;
-	DIR *d;
+	struct dirent *dentry;
+	DIR *dh;
 
 	UNUSED(request);
 	UNUSED(user_data);
@@ -242,19 +277,19 @@ project_get_list(const struct _u_request *request, struct _u_response *response,
 	if (!(root = json_array()))
 		return U_ERROR_MEMORY;
 
-	if (!(d = opendir(PROJECT_PATH))) {
+	if (!(dh = opendir(PROJECT_PATH))) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to iterate through project directory.");
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
-	while ((dir = readdir(d))) {
-		if (dir->d_type == DT_DIR &&
-		    dir->d_name[0] != '.') {
-			json_array_append_new(root, json_string(dir->d_name));
+	while ((dentry = readdir(dh))) {
+		if (dentry->d_type == DT_DIR &&
+		    dentry->d_name[0] != '.') {
+			json_array_append_new(root, json_string(dentry->d_name));
 		}
 	}
 
-	closedir(d);
+	closedir(dh);
 
 	return ulfius_set_json_response(response, HTTP_OK, root);
 }
@@ -263,7 +298,7 @@ int
 project_post_file(const struct _u_request *request, struct _u_response *response, void *user_data)
 {
 	char path[PATH_MAX] = {0};
-	struct stat ignored;
+	struct stat fstat;
 	const char *id;
 	const char *file;
 	int fd;
@@ -271,13 +306,20 @@ project_post_file(const struct _u_request *request, struct _u_response *response
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_url, "id"))) {
+	id = u_map_get(request->map_url, "id");
+	if (!id) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
 
-	if (!(file = u_map_get(request->map_url, "file"))) {
+	file = u_map_get(request->map_url, "file");
+	if (!file) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No file was specified.");
+		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
+	}
+
+	if (file[0] == '.') {
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Invalid file name specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
 
@@ -287,12 +329,13 @@ project_post_file(const struct _u_request *request, struct _u_response *response
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
-	if (stat(path, &ignored) != -1) {
+	if (stat(path, &fstat) != -1) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Tried to override project file: %s", path);
 		return ulfius_set_empty_response(response, HTTP_CONFLICT);
 	}
 
-	if ((fd = open(path, O_CREAT|O_WRONLY)) == -1) {
+	fd = open(path, O_CREAT|O_WRONLY);
+	if (fd == -1) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to open project file for writing: %s", path);
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
@@ -318,8 +361,8 @@ project_post_new(const struct _u_request *request, struct _u_response *response,
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_post_body, "id")) ||
-	    strlen(id) <= 0) {
+	id = u_map_get(request->map_post_body, "id");
+	if (!id || strlen(id) <= 0) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
@@ -349,7 +392,7 @@ int
 project_put_file(const struct _u_request *request, struct _u_response *response, void *user_data)
 {
 	char path[PATH_MAX] = {0};
-	struct stat ignored;
+	struct stat fstat;
 	const char *id;
 	const char *file;
 	int fd;
@@ -357,13 +400,20 @@ project_put_file(const struct _u_request *request, struct _u_response *response,
 
 	UNUSED(user_data);
 
-	if (!(id = u_map_get(request->map_url, "id"))) {
+	id = u_map_get(request->map_url, "id");
+	if (!id) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No project id was specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
 
-	if (!(file = u_map_get(request->map_url, "file"))) {
+	file = u_map_get(request->map_url, "file");
+	if (!file) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "No file was specified.");
+		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
+	}
+
+	if (file[0] == '.') {
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Invalid file name specified.");
 		return ulfius_set_empty_response(response, HTTP_BAD_REQUEST);
 	}
 
@@ -373,12 +423,13 @@ project_put_file(const struct _u_request *request, struct _u_response *response,
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
-	if (stat(path, &ignored) == -1) {
+	if (stat(path, &fstat) == -1) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Tried to override non-existent project file: %s", path);
 		return ulfius_set_empty_response(response, HTTP_NOT_FOUND);
 	}
 
-	if ((fd = open(path, O_TRUNC|O_WRONLY)) == -1) {
+	fd = open(path, O_TRUNC|O_WRONLY);
+	if (fd == -1) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to open project file for writing: %s", path);
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
@@ -414,10 +465,10 @@ project_put_file(const struct _u_request *request, struct _u_response *response,
 int
 _project_path_check(const char *path, int create)
 {
-	struct stat ignored;
+	struct stat fstat;
 	int rc = 0;
 
-	if (stat(path, &ignored) == -1) {
+	if (stat(path, &fstat) == -1) {
 		if (create && mkdir(path, S_IRWXU) != -1)
 			rc = 1;
 		else
