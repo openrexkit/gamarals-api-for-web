@@ -1,0 +1,9 @@
+[submodule "backend/3rdparty/libmicrohttpd/code"]
+	path = backend/3rdparty/libmicrohttpd/code
+	url = https://gnunet.org/git/libmicrohttpd.git
+[submodule "backend/3rdparty/ulfius/code"]
+	path = backend/3rdparty/ulfius/code
+	url = https://github.com/gamaral/ulfius.git
+[submodule "backend/3rdparty/jansson/code"]
+	path = backend/3rdparty/jansson/code
+	url = https://github.com/akheron/jansson.git
