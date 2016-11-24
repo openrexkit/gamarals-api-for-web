@@ -4,7 +4,7 @@ all: .firmware.bin
 
 .firmware.bin: $(wildcard *.c *.h)
 	@echo "**********************"
-	@echo "*  Compiled Started  *"
+	@echo "*  Compile  Started  *"
 	@echo "**********************"
 	@echo
 

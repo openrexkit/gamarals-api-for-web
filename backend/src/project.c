@@ -85,7 +85,7 @@ project_delete_existing(const struct _u_request *request, struct _u_response *re
 		goto finish_response;
 	}
 
-	y_log_message(Y_LOG_LEVEL_DEBUG, "Successfully deleted project: %s", path);
+	y_log_message(Y_LOG_LEVEL_DEBUG, "Project '%s' was successfully deleted.", id);
 
 	rc = HTTP_NO_CONTENT;
 
@@ -231,7 +231,7 @@ project_get_files(const struct _u_request *request, struct _u_response *response
 
 	rc = snprintf(path, sizeof(path), "%s/%s", PROJECT_PATH, id);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project path.");
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to calculate project path.");
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
@@ -325,7 +325,7 @@ project_post_file(const struct _u_request *request, struct _u_response *response
 
 	rc = snprintf(path, sizeof(path), "%s/%s/%s", PROJECT_PATH, id, file);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project file path.");
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to calculate project file path.");
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
@@ -357,6 +357,9 @@ project_post_new(const struct _u_request *request, struct _u_response *response,
 {
 	char path[PATH_MAX] = {0};
 	const char *id;
+	struct dirent *dentry;
+	DIR *dh_path;
+	DIR *dh_skel;
 	int rc;
 
 	UNUSED(user_data);
@@ -369,23 +372,56 @@ project_post_new(const struct _u_request *request, struct _u_response *response,
 
 	rc = snprintf(path, sizeof(path), "%s/%s", PROJECT_PATH, id);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project path.");
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to calculate project path.");
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
 	rc = _project_path_check(PROJECT_PATH, TRUE);
 	if (rc == -1) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to create project directory.");
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to create root projects directory.");
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 
 	rc = _project_path_check(path, TRUE);
+	if (rc != 1)
+		return ulfius_set_empty_response(response, HTTP_CONFLICT);
 
-	/* TODO: MAYBE GENERATE TEMPLATE FILES */
+	if (!(dh_path = opendir(path))) {
+		y_log_message(Y_LOG_LEVEL_ERROR,
+		    "Failed to open project directory: %s", path);
+		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
+	}
+
+	if (!(dh_skel = opendir(SKEL_PATH))) {
+		y_log_message(Y_LOG_LEVEL_ERROR,
+		    "Failed to iterate through skel directory: %s",
+		    SKEL_PATH);
+		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
+	}
+
+	while ((dentry = readdir(dh_skel))) {
+		switch (dentry->d_type) {
+		case DT_REG:
+		case DT_LNK:
+			rc = linkat(dirfd(dh_skel), dentry->d_name,
+				    dirfd(dh_path), dentry->d_name, AT_SYMLINK_FOLLOW);
+			if (rc == -1) {
+				y_log_message(Y_LOG_LEVEL_ERROR,
+				    "Failed to copy skel directory file: %s",
+				    dentry->d_name);
+			}
+			break;
+
+		default: break;
+		}
+	}
+
+	closedir(dh_skel);
+	closedir(dh_path);
 
 	y_log_message(Y_LOG_LEVEL_DEBUG, "Project '%s' was successfully created.", id);
 
-	return ulfius_set_empty_response(response, rc == 1 ? HTTP_CREATED : HTTP_CONFLICT);
+	return ulfius_set_empty_response(response, HTTP_CREATED);
 }
 
 int
@@ -419,7 +455,7 @@ project_put_file(const struct _u_request *request, struct _u_response *response,
 
 	rc = snprintf(path, sizeof(path), "%s/%s/%s", PROJECT_PATH, id, file);
 	if (rc <= 0) {
-		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to generate project file path.");
+		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to calculate project file path.");
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
 	}
 

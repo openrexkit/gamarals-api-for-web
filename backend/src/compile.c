@@ -58,6 +58,7 @@ compile_put_project(const struct _u_request *request, struct _u_response *respon
 		y_log_message(Y_LOG_LEVEL_ERROR, "Failed to fork process!");
 		return U_ERROR;
 	case 0:
+		while (-1 == dup2(fd[1], STDERR_FILENO) && EINTR == errno);
 		while (-1 == dup2(fd[1], STDOUT_FILENO) && EINTR == errno);
 
 		if (-1 == chdir(path)) {
