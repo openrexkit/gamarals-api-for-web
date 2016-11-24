@@ -13,6 +13,7 @@ check_include_file(sys/types.h HAVE_SYS_TYPES_H)
 check_include_file(unistd.h    HAVE_UNISTD_H)
 
 include_directories(
+    ${CMAKE_CURRENT_SOURCE_DIR}/../jansson/code/src
     ${CMAKE_CURRENT_SOURCE_DIR}/code/lib/orcania
     ${CMAKE_CURRENT_SOURCE_DIR}/code/lib/yder/src
     ${CMAKE_CURRENT_SOURCE_DIR}/code/src
