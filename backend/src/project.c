@@ -334,7 +334,7 @@ project_post_file(const struct _u_request *request, struct _u_response *response
 		return ulfius_set_empty_response(response, HTTP_CONFLICT);
 	}
 
-	fd = open(path, O_CREAT|O_WRONLY);
+	fd = open(path, O_CREAT|O_WRONLY, S_IRUSR|S_IWUSR|S_IRGRP|S_IROTH);
 	if (fd == -1) {
 		y_log_message(Y_LOG_LEVEL_DEBUG, "Failed to open project file for writing: %s", path);
 		return ulfius_set_empty_response(response, HTTP_INTERNAL_SERVER_ERROR);
