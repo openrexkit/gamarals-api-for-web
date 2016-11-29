@@ -30,6 +30,8 @@ main(int argc, char *argv[])
 	}
 
 	u_map_put(instance.default_headers, "Access-Control-Allow-Origin", "*");
+	u_map_put(instance.default_headers, "Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE");
+	u_map_put(instance.default_headers, "Access-Control-Allow-Headers", "Content-Type");
 	instance.max_post_body_size = 1024 * 1024; /* 1 MB post limit */
 
 	ulfius_add_endpoint_by_val(&instance, "DELETE", PREFIX, "/project/:id", NULL, NULL, NULL, &project_delete_existing, NULL);
@@ -87,8 +89,9 @@ sig_nop(int signal)
 int
 default_get(const struct _u_request *request, struct _u_response *response, void *user_data)
 {
-	UNUSED(request);
 	UNUSED(user_data);
+	if (strcmp("OPTIONS", request->http_verb) == 0)
+		return ulfius_set_empty_response(response, 200);
 	return ulfius_set_empty_response(response, 404);
 }
 
