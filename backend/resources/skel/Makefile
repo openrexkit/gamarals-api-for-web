@@ -19,5 +19,27 @@ clean:
 	@$(RM) *.o .firmware.bin
 
 flash: .firmware.bin
-	@$(FLASHER) firmware
+	@echo "********************"
+	@echo "*  Flash  Started  *"
+	@echo "********************"
+	@echo
 
+	@$(FLASHER) flash .firmware.bin
+
+	@echo
+	@echo "********************"
+	@echo "*     Success!     *"
+	@echo "********************"
+
+reboot:
+	@echo "********************"
+	@echo "*  Reboot Started  *"
+	@echo "********************"
+	@echo
+
+	@$(FLASHER) reboot
+
+	@echo
+	@echo "********************"
+	@echo "*     Success!     *"
+	@echo "********************"
