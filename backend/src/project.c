@@ -358,8 +358,11 @@ project_post_new(const struct _u_request *request, struct _u_response *response,
 	char path[PATH_MAX] = {0};
 	const char *id;
 	struct dirent *dentry;
+	struct stat fstat;
 	DIR *dh_path;
 	DIR *dh_skel;
+	int fd_path;
+	int fd_skel;
 	int rc;
 
 	UNUSED(user_data);
@@ -403,13 +406,41 @@ project_post_new(const struct _u_request *request, struct _u_response *response,
 		switch (dentry->d_type) {
 		case DT_REG:
 		case DT_LNK:
-			rc = linkat(dirfd(dh_skel), dentry->d_name,
-				    dirfd(dh_path), dentry->d_name, AT_SYMLINK_FOLLOW);
+			rc = fstatat(dirfd(dh_skel), dentry->d_name, &fstat, 0);
+			if (rc == -1) {
+				y_log_message(Y_LOG_LEVEL_ERROR,
+				    "Failed to query skel directory file: %s",
+				    dentry->d_name);
+				continue;
+			}
+
+			fd_skel = openat(dirfd(dh_skel), dentry->d_name, O_RDONLY);
+			if (fd_skel == -1) {
+				y_log_message(Y_LOG_LEVEL_ERROR,
+				    "Failed to open skel directory file: %s",
+				    dentry->d_name);
+				continue;
+			}
+
+			fd_path = openat(dirfd(dh_path), dentry->d_name,
+			                 O_WRONLY|O_CREAT, S_IRUSR|S_IWUSR);
+			if (fd_path == -1) {
+				y_log_message(Y_LOG_LEVEL_ERROR,
+				    "Failed to create project file: %s",
+				    dentry->d_name);
+				close(fd_skel);
+				continue;
+			}
+
+			rc = sendfile(fd_path, fd_skel, NULL, fstat.st_size);
 			if (rc == -1) {
 				y_log_message(Y_LOG_LEVEL_ERROR,
 				    "Failed to copy skel directory file: %s",
 				    dentry->d_name);
 			}
+
+			close(fd_path);
+			close(fd_skel);
 			break;
 
 		default: break;
